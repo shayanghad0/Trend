@@ -1,0 +1,24 @@
+{
+  "symbol": "PIS",
+  "timeframe": "1m",
+  "timestamp": 1786816550,
+  "datetime": "2026-08-15T21:25:50.604109",
+  "classification": "INSUFFICIENT DATA",
+  "score": 0,
+  "confidence": 0,
+  "structure": "Insufficient",
+  "structure_detail": "",
+  "stage": "Unknown",
+  "pattern": "None",
+  "pattern_confidence": 0,
+  "support_zones": [],
+  "resistance_zones": [],
+  "summary": "Not enough candles (min 5). Got 4.",
+  "details": [
+    "Only 4 candles received."
+  ],
+  "indicators": {},
+  "num_candles": 4,
+  "agreement": 0,
+  "signal_count": 0
+}
