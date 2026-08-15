@@ -35,24 +35,26 @@ except ImportError:
     print("⚠️  matplotlib not installed. Chart PNG/HTML will be skipped.")
 
 # ============================================================================
-#  FETCH (fix: use 'lmit' because the server expects that)
+#  FETCH – uses 'lmit' because the API expects that misspelling
 # ============================================================================
 
 def fetch_ohlc(symbol: str, timeframe: str, limit: int = 300):
-    # NOTE: The API endpoint uses 'lmit' (misspelled) as the query parameter.
+    # NOTE: The API uses the query parameter 'lmit' (not 'limit')
     url = f"http://localhost:3001/api/ohlc/{symbol}/{timeframe}"
-    params = {"lmit": limit}   # <-- FIXED: was "limit"
+    params = {"lmit": limit}   # <-- FIXED
     try:
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
+        # If the response is a dict with a 'data' key, extract it
         if isinstance(data, dict):
             if "data" in data:
                 data = data["data"]
             elif "result" in data:
                 data = data["result"]
             else:
+                # Possibly a single candle object
                 if all(k in data for k in ("timestamp", "open", "high", "low", "close")):
                     data = [data]
                 else:
@@ -73,7 +75,7 @@ def fetch_ohlc(symbol: str, timeframe: str, limit: int = 300):
         return None
 
 # ============================================================================
-#  INDICATORS (unchanged)
+#  INDICATORS
 # ============================================================================
 
 def calculate_ema(data, period):
@@ -148,7 +150,7 @@ def linear_slope(data):
     return num / den
 
 # ============================================================================
-#  PRICE ACTION DETECTORS (enhanced)
+#  PRICE ACTION DETECTORS
 # ============================================================================
 
 def find_swings(data, lookback=None):
@@ -386,7 +388,7 @@ def classify_trend_stage(structure, rsi, atr_pct, n, breakout):
     return stage
 
 # ============================================================================
-#  ADAPTIVE TREND SCORING ENGINE (revised)
+#  ADAPTIVE TREND SCORING ENGINE
 # ============================================================================
 
 def compute_trend_score(data):
