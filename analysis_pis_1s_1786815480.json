@@ -1,0 +1,39 @@
+{
+  "symbol": "pis",
+  "timeframe": "1s",
+  "timestamp": 1786815480,
+  "datetime": "2026-08-15T21:08:00.926588",
+  "classification": "BULLISH",
+  "score": 4.140443365385972,
+  "confidence": 41.40443365385972,
+  "raw_score": 3.1053325240394787,
+  "max_possible": 7.5,
+  "num_candles": 150,
+  "structure": "PULLBACK",
+  "structure_detail": "Mixed swings, possibly a pullback",
+  "pattern": "None",
+  "pattern_confidence": 0,
+  "support_zones": [],
+  "resistance_zones": [
+    11.902485
+  ],
+  "summary": "The market is in a pullback (sideways). Volatility is low. Consider buying on pullbacks.",
+  "details": [
+    "Market Structure: PULLBACK (+0.0)",
+    "EMA Alignment: +1.0 (weighted 1.0)",
+    "RSI: 65.2 (+0.30)",
+    "Candle Strength: +0.13",
+    "Slope: 0.00047 (+0.47)",
+    "ATR: 0.03 (0.23%)"
+  ],
+  "indicators": {
+    "ema20": 11.829547928748276,
+    "ema50": 11.68188082225694,
+    "ema100": 11.517527262119192,
+    "ema200": null,
+    "rsi14": 65.1518486968678,
+    "atr14": 0.02557699999999993,
+    "atr_pct": 0.2255343462158775,
+    "slope": 0.00046974348663315386
+  }
+}
