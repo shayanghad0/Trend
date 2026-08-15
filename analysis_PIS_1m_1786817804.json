@@ -1,0 +1,73 @@
+{
+  "symbol": "PIS",
+  "timeframe": "1m",
+  "timestamp": 1786817804,
+  "datetime": "2026-08-15T21:46:44.094349",
+  "classification": "SIDEWAYS",
+  "score": -0.185,
+  "confidence": 50,
+  "structure": "RANGE",
+  "structure_detail": "",
+  "stage": "RANGE",
+  "pattern": "Doji",
+  "pattern_confidence": 70,
+  "pattern_context": "",
+  "support_zones": [],
+  "resistance_zones": [],
+  "summary": "The market is range with sideways. A Doji pattern was detected (). Volatility is high. Wait for a clearer trend.",
+  "details": [
+    "Regime: unknown (ADX: N/A)",
+    "Market Structure: RANGE () -> dir +0.0",
+    "EMA Alignment: dir -1.0",
+    "RSI: 49.3 -> dir +0.0",
+    "Volume: bearish (score -0.5)",
+    "Pattern: Doji (conf 70%) - "
+  ],
+  "indicators": {
+    "ema20": null,
+    "ema50": null,
+    "ema100": null,
+    "ema200": null,
+    "rsi14": 49.30256561618168,
+    "atr14": 1.248535318877551,
+    "atr_pct": 7.353689374381892,
+    "slope": 0.1554943088235295,
+    "adx": null,
+    "macd_hist": null,
+    "bb_middle": null,
+    "bb_upper": null,
+    "bb_lower": null,
+    "bb_width": null,
+    "volume_score": -0.5,
+    "obv_trend": "bearish",
+    "bos_choch": {
+      "bos": null,
+      "choch": null
+    },
+    "liquidity_sweep": {
+      "sweep": null,
+      "reversed": false
+    },
+    "regime": "unknown"
+  },
+  "num_candles": 17,
+  "agreement": 50,
+  "signal_count": 2,
+  "regime": "unknown",
+  "adx": null,
+  "macd_hist": null,
+  "bollinger": {
+    "middle": null,
+    "upper": null,
+    "lower": null
+  },
+  "volume_score": -0.5,
+  "bos_choch": {
+    "bos": null,
+    "choch": null
+  },
+  "liquidity_sweep": {
+    "sweep": null,
+    "reversed": false
+  }
+}

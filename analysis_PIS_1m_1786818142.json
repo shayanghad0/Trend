@@ -1,0 +1,37 @@
+{
+  "symbol": "PIS",
+  "timeframe": "1m",
+  "timestamp": 1786818142,
+  "datetime": "2026-08-15T21:52:22.038415",
+  "classification": "STRONG BEARISH",
+  "score": -10.0,
+  "confidence": 100.0,
+  "structure": "DOWNTREND",
+  "structure_detail": "Consecutive lower closes",
+  "stage": "MARKDOWN (Healthy)",
+  "pattern": "None",
+  "pattern_confidence": 0,
+  "support_zones": [],
+  "resistance_zones": [],
+  "summary": "The market is downtrend with strong bearish. Volatility is high. Consider selling on rallies.",
+  "details": [
+    "Market Structure: DOWNTREND (Consecutive lower closes) -> dir -1.0",
+    "EMA Alignment: dir -1.0",
+    "RSI: 37.8 -> dir -1.0",
+    "Slope (norm): -0.0447 -> dir -1.0"
+  ],
+  "indicators": {
+    "ema20": null,
+    "ema50": null,
+    "ema100": null,
+    "ema200": null,
+    "rsi14": 37.807838255970424,
+    "atr14": 1.3317145000000001,
+    "atr_pct": 7.858634801362978,
+    "slope": -0.05946532714138287,
+    "slope_norm": -0.04465320993454893
+  },
+  "num_candles": 18,
+  "agreement": 100.0,
+  "signal_count": 4
+}
