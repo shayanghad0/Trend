@@ -1,0 +1,35 @@
+{
+  "symbol": "op",
+  "timeframe": "5m",
+  "timestamp": 1786831223,
+  "datetime": "2026-08-16T01:30:23.882910",
+  "classification": "STRONG BULLISH",
+  "score": 8.0,
+  "confidence": 100.0,
+  "structure": "UPTREND",
+  "structure_detail": "Consecutive higher closes",
+  "stage": "MARKUP (Weak)",
+  "pattern": "Inside Bar",
+  "pattern_confidence": 60,
+  "support_zones": [],
+  "resistance_zones": [],
+  "summary": "The market is uptrend with strong bullish. A Inside Bar pattern was detected (confidence 60%). Consider buying on pullbacks.",
+  "details": [
+    "Market Structure: UPTREND (Consecutive higher closes) -> dir +1.0",
+    "Pattern: Inside Bar (conf 60%) -> dir +0.0"
+  ],
+  "indicators": {
+    "ema20": null,
+    "ema50": null,
+    "ema100": null,
+    "ema200": null,
+    "rsi14": null,
+    "atr14": null,
+    "atr_pct": null,
+    "slope": 1.2201857999999999,
+    "slope_norm": null
+  },
+  "num_candles": 5,
+  "agreement": 100.0,
+  "signal_count": 1
+}

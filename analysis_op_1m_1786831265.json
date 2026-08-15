@@ -1,0 +1,37 @@
+{
+  "symbol": "op",
+  "timeframe": "1m",
+  "timestamp": 1786831265,
+  "datetime": "2026-08-16T01:31:05.246969",
+  "classification": "WEAK BULLISH",
+  "score": 2.0,
+  "confidence": 66.66666666666666,
+  "structure": "RANGE",
+  "structure_detail": "",
+  "stage": "RANGE",
+  "pattern": "None",
+  "pattern_confidence": 0,
+  "support_zones": [],
+  "resistance_zones": [],
+  "summary": "The market is range with weak bullish. Volatility is high. Consider buying on pullbacks.",
+  "details": [
+    "Market Structure: RANGE () -> dir +0.0",
+    "EMA Alignment: dir +1.0",
+    "RSI: 89.2 -> dir -1.0",
+    "Slope (norm): 0.4325 -> dir +1.0"
+  ],
+  "indicators": {
+    "ema20": null,
+    "ema50": null,
+    "ema100": null,
+    "ema200": null,
+    "rsi14": 89.2138726057208,
+    "atr14": 0.7019775714285713,
+    "atr_pct": 6.72008061509821,
+    "slope": 0.30360930340557274,
+    "slope_norm": 0.4325057035479175
+  },
+  "num_candles": 18,
+  "agreement": 66.66666666666666,
+  "signal_count": 3
+}

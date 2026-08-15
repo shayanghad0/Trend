@@ -1,0 +1,24 @@
+{
+  "symbol": "op",
+  "timeframe": "5m",
+  "timestamp": 1786831198,
+  "datetime": "2026-08-16T01:29:58.318426",
+  "classification": "INSUFFICIENT DATA",
+  "score": 0,
+  "confidence": 0,
+  "structure": "Insufficient",
+  "structure_detail": "",
+  "stage": "Unknown",
+  "pattern": "None",
+  "pattern_confidence": 0,
+  "support_zones": [],
+  "resistance_zones": [],
+  "summary": "Not enough candles (min 5). Got 4.",
+  "details": [
+    "Only 4 candles received."
+  ],
+  "indicators": {},
+  "num_candles": 4,
+  "agreement": 0,
+  "signal_count": 0
+}
