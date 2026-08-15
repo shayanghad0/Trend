@@ -29,6 +29,7 @@ try:
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
+    from matplotlib.ticker import FuncFormatter
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -58,17 +59,24 @@ def fetch_ohlc(symbol: str, timeframe: str, limit: int = 300):
 # ============================================================================
 
 def calculate_ema(data, period):
+    """
+    Exponential Moving Average of closing prices.
+    Initialised with SMA of first 'period' values (standard approach).
+    Returns the last value or None if insufficient data.
+    """
     if len(data) < period:
         return None
     close = [c["close"] for c in data]
+    # start with SMA
     sma = sum(close[:period]) / period
-    ema = [sma] * period
+    ema = [sma] * period  # first 'period' values = SMA
     multiplier = 2 / (period + 1)
     for price in close[period:]:
         ema.append((price - ema[-1]) * multiplier + ema[-1])
     return ema[-1] if ema else None
 
 def calculate_ema_full(data, period):
+    """Return the full EMA array (same length as data)."""
     if len(data) < period:
         return None
     close = [c["close"] for c in data]
@@ -126,24 +134,21 @@ def linear_slope(data):
     den = sum((x[i] - mean_x) ** 2 for i in range(n))
     if den == 0:
         return None
-    return num / den  # raw slope (price per index)
+    slope = num / den
+    avg_price = mean_y
+    return slope / avg_price if avg_price != 0 else slope
 
 # ============================================================================
 #  PRICE ACTION DETECTORS (enhanced)
 # ============================================================================
 
-def find_swings(data, lookback=None):
-    """
-    Find swing highs and lows with adaptive lookback.
-    lookback = max(2, len(data)//20) if not provided.
-    """
-    n = len(data)
-    if lookback is None:
-        lookback = max(2, n // 20)
-        lookback = min(lookback, n//2)  # cap
+def find_swings(data, lookback=2):
+    """Find swing highs and lows using local extrema."""
     highs = []
     lows = []
+    n = len(data)
     for i in range(lookback, n - lookback):
+        # swing high
         is_high = True
         for j in range(1, lookback + 1):
             if data[i]["high"] <= data[i-j]["high"] or data[i]["high"] <= data[i+j]["high"]:
@@ -151,6 +156,7 @@ def find_swings(data, lookback=None):
                 break
         if is_high:
             highs.append((i, data[i]["high"]))
+        # swing low
         is_low = True
         for j in range(1, lookback + 1):
             if data[i]["low"] >= data[i-j]["low"] or data[i]["low"] >= data[i+j]["low"]:
@@ -161,16 +167,20 @@ def find_swings(data, lookback=None):
     return highs, lows
 
 def detect_market_structure(data):
-    """Classify: Uptrend, Downtrend, Range, Breakout, Pullback, Reversal."""
+    """
+    Classify market structure: Uptrend, Downtrend, Range, Breakout, Pullback, Reversal.
+    Uses swing highs/lows and recent price action.
+    Returns dict with structure, detail, and swing info.
+    """
     n = len(data)
     if n < 5:
-        return {"structure": "Insufficient", "detail": "", "swing_highs": [], "swing_lows": [], "breakout": None}
+        return {"structure": "Insufficient data", "detail": "", "swing_highs": [], "swing_lows": []}
 
-    highs, lows = find_swings(data)
+    highs, lows = find_swings(data, lookback=2)
     last_close = data[-1]["close"]
     last_idx = n - 1
 
-    # Breakout detection (improved)
+    # Determine if breakout
     lookback_break = min(20, n-1)
     recent = data[-lookback_break-1:-1]
     if recent:
@@ -182,23 +192,19 @@ def detect_market_structure(data):
 
     breakout = None
     if highest_prev and last_close > highest_prev:
-        # Confirm breakout: body > 60% of range and close near high
-        last = data[-1]
-        body = abs(last["close"] - last["open"])
-        range_ = last["high"] - last["low"]
-        if range_ > 0 and body / range_ > 0.6 and (last["high"] - last["close"]) < 0.3 * range_:
-            breakout = "UP"
+        breakout = "UP"
     elif lowest_prev and last_close < lowest_prev:
-        last = data[-1]
-        body = abs(last["close"] - last["open"])
-        range_ = last["high"] - last["low"]
-        if range_ > 0 and body / range_ > 0.6 and (last["close"] - last["low"]) < 0.3 * range_:
-            breakout = "DOWN"
+        breakout = "DOWN"
 
-    # Structure from swings
+    # Pullback detection: if we are in an uptrend but price has retraced some but not broken structure
+    # Reversal: if we have previous uptrend and now lower highs/lows, or vice versa.
+    # We'll implement a simplified version using swing points.
+
+    # Determine if we have at least 2 swings each
     structure = "RANGE"
     detail = ""
     if len(highs) >= 2 and len(lows) >= 2:
+        # Check for higher highs and higher lows
         hh = highs[-1][1] > highs[-2][1]
         ll = lows[-1][1] > lows[-2][1]
         lh = highs[-1][1] < highs[-2][1]
@@ -212,12 +218,24 @@ def detect_market_structure(data):
             detail = "Lower Highs and Lower Lows"
         elif (hh and not ll) or (not hh and ll):
             structure = "PULLBACK"
-            detail = "Mixed swings, likely pullback"
+            detail = "Mixed swings, possibly a pullback"
         else:
             structure = "RANGE"
-            detail = "No clear direction"
+            detail = "No clear directional swings"
+
+        # Override if breakout detected
+        if breakout == "UP":
+            structure = "BREAKOUT"
+            detail = "Bullish breakout above recent resistance"
+        elif breakout == "DOWN":
+            structure = "BREAKOUT"
+            detail = "Bearish breakout below recent support"
+
+        # Reversal detection: if we had a trend and now opposite swings
+        # For simplicity, we'll check if last two swings show a change in direction
+        # (complex, skip for now)
     else:
-        # Fallback: consecutive closes
+        # Fallback: use recent consecutive closes
         if n >= 5:
             recent_closes = [c["close"] for c in data[-5:]]
             if all(recent_closes[i] < recent_closes[i+1] for i in range(4)):
@@ -226,14 +244,9 @@ def detect_market_structure(data):
             elif all(recent_closes[i] > recent_closes[i+1] for i in range(4)):
                 structure = "DOWNTREND"
                 detail = "Consecutive lower closes"
-
-    # Override with breakout if detected
-    if breakout == "UP":
-        structure = "BREAKOUT"
-        detail = "Bullish breakout above resistance"
-    elif breakout == "DOWN":
-        structure = "BREAKOUT"
-        detail = "Bearish breakout below support"
+            else:
+                structure = "RANGE"
+                detail = "Sideways"
 
     return {
         "structure": structure,
@@ -244,10 +257,9 @@ def detect_market_structure(data):
     }
 
 def detect_candle_patterns(data):
-    """Recognize multiple candlestick patterns."""
+    """Recognize common candlestick patterns on the last candle."""
     if len(data) < 2:
         return {"pattern": "None", "confidence": 0}
-
     last = data[-1]
     prev = data[-2]
     o, h, l, c = last["open"], last["high"], last["low"], last["close"]
@@ -255,7 +267,6 @@ def detect_candle_patterns(data):
     high_low = h - l
     if high_low == 0:
         return {"pattern": "None", "confidence": 0}
-
     body_pct = abs(body) / high_low
     upper_wick = h - max(o, c)
     lower_wick = min(o, c) - l
@@ -263,82 +274,41 @@ def detect_candle_patterns(data):
     pattern = "None"
     conf = 0
 
-    # Marubozu (no wicks)
-    if body_pct > 0.9:
-        if body > 0:
-            pattern = "Bullish Marubozu"
-            conf = 80
-        else:
-            pattern = "Bearish Marubozu"
-            conf = 80
-    # Doji
-    elif body_pct < 0.1:
+    # Doji: very small body
+    if body_pct < 0.1:
         pattern = "Doji"
         conf = 70
-    # Hammer (bullish)
+    # Hammer: small body near top, long lower wick, minimal upper wick
     elif body > 0 and lower_wick > 2 * abs(body) and upper_wick < 0.3 * abs(body):
         pattern = "Hammer"
-        conf = 75
-    # Shooting Star (bearish)
+        conf = 70
+    # Shooting Star: small body near bottom, long upper wick, minimal lower wick
     elif body < 0 and upper_wick > 2 * abs(body) and lower_wick < 0.3 * abs(body):
         pattern = "Shooting Star"
-        conf = 75
-    # Bullish Engulfing
-    elif prev["close"] < prev["open"] and body > 0 and c > prev["open"] and o < prev["close"]:
+        conf = 70
+    # Bullish Engulfing: current body > previous body and current close > previous open, current open < previous close
+    elif data[-2]["close"] < data[-2]["open"] and body > 0 and c > data[-2]["open"] and o < data[-2]["close"]:
         pattern = "Bullish Engulfing"
-        conf = 85
+        conf = 80
     # Bearish Engulfing
-    elif prev["close"] > prev["open"] and body < 0 and c < prev["open"] and o > prev["close"]:
+    elif data[-2]["close"] > data[-2]["open"] and body < 0 and c < data[-2]["open"] and o > data[-2]["close"]:
         pattern = "Bearish Engulfing"
-        conf = 85
-    # Harami (bullish)
-    elif prev["close"] > prev["open"] and body > 0 and o > prev["close"] and c < prev["open"]:
-        pattern = "Bullish Harami"
-        conf = 70
-    # Harami (bearish)
-    elif prev["close"] < prev["open"] and body < 0 and o < prev["close"] and c > prev["open"]:
-        pattern = "Bearish Harami"
-        conf = 70
-    # Piercing Line (bullish)
-    elif prev["close"] < prev["open"] and body > 0 and o < prev["close"] and c > (prev["open"] + prev["close"])/2:
-        pattern = "Piercing Line"
-        conf = 75
-    # Dark Cloud Cover (bearish)
-    elif prev["close"] > prev["open"] and body < 0 and o > prev["close"] and c < (prev["open"] + prev["close"])/2:
-        pattern = "Dark Cloud Cover"
-        conf = 75
-    # Three White Soldiers – requires 3 candles; we'll check last 3
-    if len(data) >= 3:
-        c1, c2, c3 = data[-3], data[-2], data[-1]
-        if c1["close"] > c1["open"] and c2["close"] > c2["open"] and c3["close"] > c3["open"]:
-            # each body larger than previous
-            if (c2["close"]-c2["open"]) > (c1["close"]-c1["open"]) and (c3["close"]-c3["open"]) > (c2["close"]-c2["open"]):
-                pattern = "Three White Soldiers"
-                conf = 85
-    # Three Black Crows
-    if len(data) >= 3:
-        c1, c2, c3 = data[-3], data[-2], data[-1]
-        if c1["close"] < c1["open"] and c2["close"] < c2["open"] and c3["close"] < c3["open"]:
-            if (c1["open"]-c1["close"]) < (c2["open"]-c2["close"]) and (c2["open"]-c2["close"]) < (c3["open"]-c3["close"]):
-                pattern = "Three Black Crows"
-                conf = 85
-    # Inside Bar (second candle inside previous)
-    if len(data) >= 2:
-        if data[-1]["high"] < data[-2]["high"] and data[-1]["low"] > data[-2]["low"]:
-            pattern = "Inside Bar"
-            conf = 60
-    # Outside Bar (second candle engulfs previous) – already covered by engulfing
+        conf = 80
 
     return {"pattern": pattern, "confidence": conf}
 
 def find_support_resistance_zones(data, lookback=20, zone_pct=0.005):
-    """Return resistance and support zones."""
+    """
+    Find support/resistance zones based on swing highs/lows.
+    Returns list of zones as tuples (price, type, strength).
+    """
     if len(data) < lookback:
         return [], []
-    highs, lows = find_swings(data)
+    highs, lows = find_swings(data, lookback=2)
+    # Take last few swings
     recent_highs = [p for idx, p in highs if idx >= len(data)-lookback]
     recent_lows = [p for idx, p in lows if idx >= len(data)-lookback]
-
+    # Cluster prices within zone_pct to form zones
     def cluster(prices, tol):
         if not prices:
             return []
@@ -349,271 +319,220 @@ def find_support_resistance_zones(data, lookback=20, zone_pct=0.005):
             if abs(p - current[-1]) / current[-1] < tol:
                 current.append(p)
             else:
-                if len(current) >= 2:
-                    clusters.append(sum(current)/len(current))
+                clusters.append(current)
                 current = [p]
-        if len(current) >= 2:
-            clusters.append(sum(current)/len(current))
-        return clusters
-
-    res_zones = cluster(recent_highs, zone_pct)
-    sup_zones = cluster(recent_lows, zone_pct)
+        clusters.append(current)
+        # return average of each cluster
+        return [sum(cl)/len(cl) for cl in clusters if len(cl) >= 2]
+    res_zones = cluster(recent_highs, zone_pct) if recent_highs else []
+    sup_zones = cluster(recent_lows, zone_pct) if recent_lows else []
     return res_zones, sup_zones
 
 # ============================================================================
-#  TREND STAGE CLASSIFICATION
-# ============================================================================
-
-def classify_trend_stage(structure, rsi, atr_pct, n, breakout):
-    """
-    Return a stage: Accumulation, Markup, Distribution, Markdown,
-    Pullback, Breakout, Reversal, Exhaustion.
-    """
-    stage = structure  # default
-
-    # Use RSI and volatility to refine
-    if structure == "UPTREND":
-        if rsi is not None and rsi > 70:
-            stage = "MARKUP (Overextended)"
-        elif rsi is not None and rsi > 50:
-            stage = "MARKUP (Healthy)"
-        else:
-            stage = "MARKUP (Weak)"
-    elif structure == "DOWNTREND":
-        if rsi is not None and rsi < 30:
-            stage = "MARKDOWN (Oversold)"
-        elif rsi is not None and rsi < 50:
-            stage = "MARKDOWN (Healthy)"
-        else:
-            stage = "MARKDOWN (Weak)"
-    elif structure == "RANGE":
-        if atr_pct is not None and atr_pct < 0.5:
-            stage = "ACCUMULATION/DISTRIBUTION (Low Vol)"
-        else:
-            stage = "RANGE"
-    elif structure == "BREAKOUT":
-        if breakout == "UP":
-            stage = "BREAKOUT (Bullish)"
-        else:
-            stage = "BREAKOUT (Bearish)"
-    elif structure == "PULLBACK":
-        stage = "PULLBACK"
-
-    # Additional: if we have reversal signs (e.g., RSI divergence not implemented)
-    return stage
-
-# ============================================================================
-#  ADAPTIVE TREND SCORING ENGINE (revised)
+#  ADAPTIVE TREND SCORING ENGINE (improved)
 # ============================================================================
 
 def compute_trend_score(data):
+    """
+    Adaptive multi‑factor trend score based on number of candles.
+    Returns dict with score, confidence, structure, patterns, etc.
+    """
     n = len(data)
     if n < 5:
         return {
             "score": 0,
             "confidence": 0,
             "classification": "INSUFFICIENT DATA",
-            "structure": {"structure": "Insufficient", "detail": ""},
+            "structure": {"structure": "Insufficient data", "detail": ""},
             "patterns": {"pattern": "None", "confidence": 0},
             "support_zones": [],
             "resistance_zones": [],
-            "stage": "Unknown",
-            "summary": "Not enough candles (min 5).",
+            "summary": "Not enough candles to perform analysis (minimum 5).",
             "details": [],
-            "indicators": {},
-            "agreement": 0,
-            "signal_count": 0
+            "indicators": {}
         }
 
-    # Compute all indicators (some may be None)
+    # ---------------------- Market Structure (always) -----------------------
+    structure = detect_market_structure(data)
+    structure_type = structure["structure"]
+
+    # ---------------------- Candle Patterns (always) -----------------------
+    pattern = detect_candle_patterns(data)
+
+    # ---------------------- Support/Resistance Zones (always) ----------------
+    res_zones, sup_zones = find_support_resistance_zones(data, lookback=min(20, n-1))
+
+    # ---------------------- Adaptive indicator selection --------------------
+    # We'll compute indicators only if enough candles exist
     ema20 = calculate_ema(data, 20) if n >= 20 else None
     ema50 = calculate_ema(data, 50) if n >= 50 else None
     ema100 = calculate_ema(data, 100) if n >= 100 else None
     ema200 = calculate_ema(data, 200) if n >= 200 else None
+
+    # For short-term, use EMA10 if available
     ema10 = calculate_ema(data, 10) if n >= 10 else None
 
     rsi14 = calculate_rsi(data, 14) if n >= 15 else None
     atr14 = calculate_atr(data, 14) if n >= 15 else None
     slope = linear_slope(data[-min(20, n):]) if n >= 5 else None
 
-    # Normalize slope by ATR if available
-    slope_norm = None
-    if slope is not None and atr14 is not None and atr14 > 0:
-        slope_norm = slope / atr14
+    # ---------------------- Weighted scoring --------------------------------
+    # Weights: structure 30%, EMA alignment 25%, breakout 20%, momentum (RSI) 10%,
+    # candle strength 5%, slope 5%, ATR 5% (but adaptive)
+    score = 0
+    max_score = 0
+    details = []
+    weights = []
 
-    # Market structure
-    structure = detect_market_structure(data)
-    struct_dir = 0
-    if structure["structure"] in ["UPTREND", "BREAKOUT"]:
-        if structure.get("breakout") == "UP" or structure["structure"] == "UPTREND":
-            struct_dir = 1
-    elif structure["structure"] in ["DOWNTREND"]:
-        struct_dir = -1
-    elif structure.get("breakout") == "DOWN":
-        struct_dir = -1
-    else:
-        struct_dir = 0  # RANGE, PULLBACK, etc.
+    # 1. Market Structure (30%)
+    struct_score = 0
+    if structure_type == "UPTREND":
+        struct_score = 1.0
+    elif structure_type == "DOWNTREND":
+        struct_score = -1.0
+    elif structure_type == "BREAKOUT":
+        # breakout direction
+        if structure["breakout"] == "UP":
+            struct_score = 1.0
+        else:
+            struct_score = -1.0
+    else:  # RANGE, PULLBACK, etc.
+        struct_score = 0.0
+    score += struct_score * 3.0   # weight 30% of 10 = 3.0
+    max_score += 3.0
+    details.append(f"Market Structure: {structure_type} ({struct_score:+.1f})")
 
-    # EMA alignment direction
-    ema_dir = 0
-    ema_available = False
-    if ema20 and ema50 and ema100 and ema200:
-        ema_available = True
+    # 2. EMA Alignment (25%) - only if we have enough data
+    ema_score = 0
+    ema_weights = 0
+    if n >= 100 and ema20 and ema50 and ema100 and ema200:
         if ema20 > ema50 > ema100 > ema200:
-            ema_dir = 1
+            ema_score = 1.0
         elif ema20 < ema50 < ema100 < ema200:
-            ema_dir = -1
+            ema_score = -1.0
         else:
             # partial alignment
             if ema20 > ema50:
-                ema_dir += 1
+                ema_score += 0.5
             else:
-                ema_dir -= 1
+                ema_score -= 0.5
             if ema50 > ema100:
-                ema_dir += 1
+                ema_score += 0.5
             else:
-                ema_dir -= 1
+                ema_score -= 0.5
             if ema100 > ema200:
-                ema_dir += 1
+                ema_score += 0.5
             else:
-                ema_dir -= 1
-            ema_dir = 1 if ema_dir > 0 else (-1 if ema_dir < 0 else 0)
-    elif ema20 and ema50:
-        ema_available = True
-        ema_dir = 1 if ema20 > ema50 else -1
-    elif ema10:
-        ema_available = True
-        last_close = data[-1]["close"]
-        ema_dir = 1 if last_close > ema10 else -1
-
-    # Breakout direction from structure
-    breakout_dir = 0
-    if structure.get("breakout") == "UP":
-        breakout_dir = 1
-    elif structure.get("breakout") == "DOWN":
-        breakout_dir = -1
-
-    # RSI zone (confirmation, not direction)
-    rsi_dir = 0
-    if rsi14 is not None:
-        if rsi14 > 70:
-            rsi_dir = -1  # overbought – bearish signal
-        elif rsi14 > 55:
-            rsi_dir = 1   # bullish confirmation
-        elif rsi14 < 30:
-            rsi_dir = 1   # oversold – bullish reversal potential
-        elif rsi14 < 45:
-            rsi_dir = -1  # bearish confirmation
+                ema_score -= 0.5
+            # normalize
+            ema_score = max(-1, min(1, ema_score / 1.5))
+        ema_weights = 1.0
+    elif n >= 50 and ema20 and ema50:
+        if ema20 > ema50:
+            ema_score = 1.0
         else:
-            rsi_dir = 0   # neutral
+            ema_score = -1.0
+        ema_weights = 1.0
+    elif n >= 10 and ema10:
+        last_close = data[-1]["close"]
+        if last_close > ema10:
+            ema_score = 0.5
+        else:
+            ema_score = -0.5
+        ema_weights = 0.5  # lower weight when only EMA10
 
-    # Pattern direction
-    pat = detect_candle_patterns(data)
-    pat_dir = 0
-    if pat["pattern"] in ["Bullish Engulfing", "Hammer", "Piercing Line", "Three White Soldiers", "Bullish Harami", "Bullish Marubozu"]:
-        pat_dir = 1
-    elif pat["pattern"] in ["Bearish Engulfing", "Shooting Star", "Dark Cloud Cover", "Three Black Crows", "Bearish Harami", "Bearish Marubozu"]:
-        pat_dir = -1
+    if ema_weights > 0:
+        score += ema_score * 2.5 * ema_weights  # 25% of 10 = 2.5
+        max_score += 2.5 * ema_weights
+        details.append(f"EMA Alignment: {ema_score:+.1f} (weighted {ema_weights:.1f})")
 
-    # Slope direction
-    slope_dir = 0
-    if slope_norm is not None:
-        if slope_norm > 0.01:  # threshold
-            slope_dir = 1
-        elif slope_norm < -0.01:
-            slope_dir = -1
+    # 3. Breakout (20%) - already captured in structure but we add a separate breakout factor
+    # Actually breakout is already in structure, so we can skip or add extra for breakout strength
+    # We'll add a small bonus/penalty if breakout is detected
+    if structure_type == "BREAKOUT":
+        if structure["breakout"] == "UP":
+            score += 1.0
+            details.append("Breakout bonus: +1.0 (Bullish)")
+        else:
+            score -= 1.0
+            details.append("Breakout bonus: -1.0 (Bearish)")
+        max_score += 1.0
 
-    # Weights (sum to 100%)
-    w_struct = 40
-    w_ema = 20 if ema_available else 0
-    w_breakout = 15 if breakout_dir != 0 else 0
-    w_rsi = 10 if rsi14 is not None else 0
-    w_pattern = 10 if pat["pattern"] != "None" else 0
-    w_slope = 5 if slope_dir != 0 else 0
+    # 4. Momentum (RSI) (10%) - if available
+    if rsi14 is not None:
+        rsi_score = (rsi14 - 50) / 50  # scale from -1 to 1
+        rsi_score = max(-1, min(1, rsi_score))
+        score += rsi_score * 1.0
+        max_score += 1.0
+        details.append(f"RSI: {rsi14:.1f} ({rsi_score:+.2f})")
 
-    total_weight = w_struct + w_ema + w_breakout + w_rsi + w_pattern + w_slope
-    if total_weight == 0:
-        # fallback: use structure only
-        total_weight = 100
-        w_struct = 100
+    # 5. Candle Strength (5%)
+    last_body = abs(data[-1]["close"] - data[-1]["open"])
+    last_range = data[-1]["high"] - data[-1]["low"]
+    if last_range > 0:
+        candle_power = last_body / last_range
+        if data[-1]["close"] > data[-1]["open"]:
+            candle_score = min(1, candle_power * 2 - 0.5)  # 0.5 to 1.0 for bullish
+        else:
+            candle_score = -min(1, candle_power * 2 - 0.5)
+        score += candle_score * 0.5
+        max_score += 0.5
+        details.append(f"Candle Strength: {candle_score:+.2f}")
 
-    # Compute weighted score (normalized to -10..10)
-    score = (struct_dir * w_struct +
-             ema_dir * w_ema +
-             breakout_dir * w_breakout +
-             rsi_dir * w_rsi +
-             pat_dir * w_pattern +
-             slope_dir * w_slope) / total_weight * 10
+    # 6. Regression Slope (5%)
+    if slope is not None:
+        slope_score = max(-1, min(1, slope * 1000))  # normalize
+        score += slope_score * 0.5
+        max_score += 0.5
+        details.append(f"Slope: {slope:.5f} ({slope_score:+.2f})")
 
-    # Determine agreement: count signals that agree with final direction
-    final_dir = 1 if score > 1.5 else (-1 if score < -1.5 else 0)
-    signals = []
-    if struct_dir != 0:
-        signals.append(struct_dir)
-    if ema_available and ema_dir != 0:
-        signals.append(ema_dir)
-    if breakout_dir != 0:
-        signals.append(breakout_dir)
-    if rsi14 is not None and rsi_dir != 0:
-        signals.append(rsi_dir)
-    if pat["pattern"] != "None" and pat_dir != 0:
-        signals.append(pat_dir)
-    if slope_dir != 0:
-        signals.append(slope_dir)
-
-    if final_dir != 0 and len(signals) > 0:
-        agreeing = sum(1 for s in signals if s == final_dir)
-        confidence = agreeing / len(signals) * 100
-    else:
-        confidence = 50  # neutral
-
-    # Classification
-    if score >= 7:
-        classification = "STRONG BULLISH"
-    elif score >= 4:
-        classification = "BULLISH"
-    elif score >= 1.5:
-        classification = "WEAK BULLISH"
-    elif score >= -1.5:
-        classification = "SIDEWAYS"
-    elif score >= -4:
-        classification = "WEAK BEARISH"
-    elif score >= -7:
-        classification = "BEARISH"
-    else:
-        classification = "STRONG BEARISH"
-
-    # Trend stage
+    # 7. ATR (volatility) - just info, not directional
+    atr_info = atr14 if atr14 is not None else 0
     atr_pct = None
     if atr14 is not None:
         avg_price = sum(c["close"] for c in data) / len(data)
         atr_pct = atr14 / avg_price * 100 if avg_price != 0 else 0
-    stage = classify_trend_stage(structure["structure"], rsi14, atr_pct, n, structure.get("breakout"))
+        details.append(f"ATR: {atr14:.2f} ({atr_pct:.2f}%)")
 
-    # Support/Resistance zones
-    res_zones, sup_zones = find_support_resistance_zones(data, lookback=min(20, n-1))
+    # Normalize score to 0-10 range (since max_score might be less than 10)
+    if max_score > 0:
+        normalized = (score / max_score) * 10
+    else:
+        normalized = 0
 
-    # Details
-    details = []
-    details.append(f"Market Structure: {structure['structure']} ({structure['detail']}) -> dir {struct_dir:+.1f}")
-    if ema_available:
-        details.append(f"EMA Alignment: dir {ema_dir:+.1f}")
-    if breakout_dir != 0:
-        details.append(f"Breakout: dir {breakout_dir:+.1f}")
-    if rsi14 is not None:
-        details.append(f"RSI: {rsi14:.1f} -> dir {rsi_dir:+.1f}")
-    if pat["pattern"] != "None":
-        details.append(f"Pattern: {pat['pattern']} (conf {pat['confidence']}%) -> dir {pat_dir:+.1f}")
-    if slope_dir != 0:
-        details.append(f"Slope (norm): {slope_norm:.4f} -> dir {slope_dir:+.1f}")
+    # Confidence = absolute score / max_score * 100
+    confidence = abs(score) / max_score * 100 if max_score > 0 else 0
 
-    # Summary
-    summary = f"The market is {structure['structure'].lower()} with {classification.lower()}. "
-    if pat["pattern"] != "None":
-        summary += f"A {pat['pattern']} pattern was detected (confidence {pat['confidence']}%). "
+    # Classification based on normalized score
+    if normalized >= 7:
+        classification = "STRONG BULLISH"
+    elif normalized >= 4:
+        classification = "BULLISH"
+    elif normalized >= 1.5:
+        classification = "WEAK BULLISH"
+    elif normalized >= -1.5:
+        classification = "SIDEWAYS"
+    elif normalized >= -4:
+        classification = "WEAK BEARISH"
+    elif normalized >= -7:
+        classification = "BEARISH"
+    else:
+        classification = "STRONG BEARISH"
+
+    # Generate human-friendly summary
+    summary = ""
+    if structure_type in ["UPTREND", "DOWNTREND", "BREAKOUT"]:
+        summary = f"The market is in a {structure_type.lower()} with {classification.lower()}. "
+    else:
+        summary = f"The market is in a {structure_type.lower()} (sideways). "
+    if pattern["pattern"] != "None":
+        summary += f"A {pattern['pattern']} pattern was detected (confidence {pattern['confidence']}%). "
     if atr_pct is not None:
-        summary += f"Volatility is {'high' if atr_pct > 2 else 'low' if atr_pct < 0.5 else 'normal'}. "
-    # Recommendation
+        if atr_pct > 2:
+            summary += "Volatility is high. "
+        elif atr_pct < 0.5:
+            summary += "Volatility is low. "
+    # Add recommendation
     if "BULLISH" in classification:
         summary += "Consider buying on pullbacks."
     elif "BEARISH" in classification:
@@ -622,12 +541,13 @@ def compute_trend_score(data):
         summary += "Wait for a clearer trend."
 
     return {
-        "score": score,
+        "score": normalized,
+        "raw_score": score,
+        "max_possible": max_score,
         "confidence": confidence,
         "classification": classification,
         "structure": structure,
-        "patterns": pat,
-        "stage": stage,
+        "patterns": pattern,
         "support_zones": sup_zones,
         "resistance_zones": res_zones,
         "summary": summary,
@@ -641,19 +561,16 @@ def compute_trend_score(data):
             "atr14": atr14,
             "atr_pct": atr_pct,
             "slope": slope,
-            "slope_norm": slope_norm,
-        },
-        "agreement": confidence,  # keep for backward compatibility
-        "signal_count": len(signals),
-        "num_candles": n,
+        }
     }
 
 # ============================================================================
-#  EXPORT FUNCTIONS
+#  EXPORT FUNCTIONS (enhanced)
 # ============================================================================
 
 def export_metadata_json(result, symbol, timeframe, timestamp):
     filename = f"analysis_{symbol}_{timeframe}_{timestamp}.json"
+    # Prepare a clean dict for JSON
     data = {
         "symbol": symbol,
         "timeframe": timeframe,
@@ -662,19 +579,18 @@ def export_metadata_json(result, symbol, timeframe, timestamp):
         "classification": result["classification"],
         "score": result["score"],
         "confidence": result["confidence"],
+        "raw_score": result["raw_score"],
+        "max_possible": result["max_possible"],
+        "num_candles": result.get("num_candles", 0),
         "structure": result["structure"]["structure"],
         "structure_detail": result["structure"]["detail"],
-        "stage": result["stage"],
         "pattern": result["patterns"]["pattern"],
         "pattern_confidence": result["patterns"]["confidence"],
         "support_zones": result["support_zones"],
         "resistance_zones": result["resistance_zones"],
         "summary": result["summary"],
         "details": result["details"],
-        "indicators": result["indicators"],
-        "num_candles": result["num_candles"],
-        "agreement": result["agreement"],
-        "signal_count": result["signal_count"],
+        "indicators": result["indicators"]
     }
     with open(filename, "w") as f:
         json.dump(data, f, indent=2)
@@ -686,12 +602,14 @@ def generate_chart(data, symbol, timeframe, result, timestamp):
         print("⚠️  matplotlib not installed. Skipping chart generation.")
         return None, None
 
+    # Prepare data
     dates = [datetime.fromtimestamp(c["timestamp"]/1000) for c in data]
     opens = [c["open"] for c in data]
     highs = [c["high"] for c in data]
     lows = [c["low"] for c in data]
     closes = [c["close"] for c in data]
 
+    # Compute EMAs for plotting (full arrays)
     ema20_full = calculate_ema_full(data, 20) if len(data) >= 20 else None
     ema50_full = calculate_ema_full(data, 50) if len(data) >= 50 else None
     ema100_full = calculate_ema_full(data, 100) if len(data) >= 100 else None
@@ -699,6 +617,7 @@ def generate_chart(data, symbol, timeframe, result, timestamp):
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
+    # Plot candlesticks
     width = 0.6
     for i, (o, h, l, c, dt) in enumerate(zip(opens, highs, lows, closes, dates)):
         color = 'green' if c >= o else 'red'
@@ -711,6 +630,7 @@ def generate_chart(data, symbol, timeframe, result, timestamp):
             ax.plot([i - width/2, i + width/2], [o, o], color=color, linewidth=1)
         ax.plot([i, i], [l, h], color='black', linewidth=1, alpha=0.7)
 
+    # Plot EMAs
     if ema20_full:
         ax.plot(range(len(ema20_full)), ema20_full, label='EMA20', color='blue', alpha=0.7)
     if ema50_full:
@@ -720,24 +640,26 @@ def generate_chart(data, symbol, timeframe, result, timestamp):
     if ema200_full:
         ax.plot(range(len(ema200_full)), ema200_full, label='EMA200', color='red', alpha=0.7)
 
-    # Support/Resistance zones
+    # Support/Resistance zones (shaded)
     for zone in result["support_zones"]:
         ax.axhspan(zone - 0.005*zone, zone + 0.005*zone, alpha=0.2, color='green', label='Support' if zone == result["support_zones"][0] else "")
     for zone in result["resistance_zones"]:
         ax.axhspan(zone - 0.005*zone, zone + 0.005*zone, alpha=0.2, color='red', label='Resistance' if zone == result["resistance_zones"][0] else "")
 
-    # Pattern annotation
-    pat = result["patterns"]["pattern"]
-    if pat != "None":
-        ax.annotate(pat, xy=(len(data)-1, closes[-1]), xytext=(len(data)-2, closes[-1]*1.02),
+    # Annotate pattern
+    pattern = result["patterns"]["pattern"]
+    if pattern != "None":
+        ax.annotate(pattern, xy=(len(data)-1, closes[-1]), xytext=(len(data)-2, closes[-1]*1.02),
                     arrowprops=dict(facecolor='black', shrink=0.05), fontweight='bold')
 
+    # Title with score and confidence
     title = f"{symbol} ({timeframe}) - {result['classification']} (Score: {result['score']:.1f}/10, Conf: {result['confidence']:.0f}%)"
     ax.set_title(title)
     ax.set_xlabel("Candle Index")
     ax.set_ylabel("Price")
     ax.legend(loc='upper left')
 
+    # Format x-axis
     if len(dates) > 20:
         step = max(1, len(dates) // 10)
         ax.set_xticks(range(0, len(dates), step))
@@ -750,11 +672,12 @@ def generate_chart(data, symbol, timeframe, result, timestamp):
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
 
+    # Save PNG
     png_file = f"chart_{symbol}_{timeframe}_{timestamp}.png"
     fig.savefig(png_file, dpi=150, bbox_inches='tight')
     print(f"✅ Chart PNG saved to {png_file}")
 
-    # HTML report
+    # Save HTML with embedded PNG
     with open(png_file, "rb") as img_f:
         img_b64 = base64.b64encode(img_f.read()).decode('utf-8')
 
@@ -787,12 +710,10 @@ def generate_chart(data, symbol, timeframe, result, timestamp):
         <p><strong>Classification:</strong> <span class="{'bullish' if 'BULLISH' in result['classification'] else 'bearish' if 'BEARISH' in result['classification'] else 'neutral'}">{result['classification']}</span></p>
         <p><strong>Score:</strong> {result['score']:.1f}/10 &nbsp;|&nbsp; <strong>Confidence:</strong> {result['confidence']:.0f}%</p>
         <p><strong>Market Structure:</strong> {result['structure']['structure']} ({result['structure']['detail']})</p>
-        <p><strong>Trend Stage:</strong> {result['stage']}</p>
         <p><strong>Latest Pattern:</strong> {result['patterns']['pattern']} (conf. {result['patterns']['confidence']}%)</p>
         <p><strong>Support Zones:</strong> {', '.join(f'<span class="zone support">{z:.2f}</span>' for z in result['support_zones'])}</p>
         <p><strong>Resistance Zones:</strong> {', '.join(f'<span class="zone resistance">{z:.2f}</span>' for z in result['resistance_zones'])}</p>
-        <p><strong>Candles used:</strong> {result['num_candles']}</p>
-        <p><strong>Signal Agreement:</strong> {result['agreement']:.0f}% ({result['signal_count']} signals)</p>
+        <p><strong>Candles used:</strong> {result.get('num_candles', 0)}</p>
         <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
     </div>
     <h2>Detail Breakdown</h2>
@@ -824,26 +745,6 @@ def save_to_json(data, symbol, timeframe):
     with open(filename, "w") as f:
         json.dump(data, f, indent=2)
     print(f"✅ Raw OHLC saved to {filename}")
-
-def print_terminal_analysis(result, symbol, timeframe):
-    """Print a clean summary to the terminal."""
-    print("\n" + "=" * 60)
-    print(f"📊  {symbol} ({timeframe}) – Trend Analysis")
-    print("=" * 60)
-    print(f"Classification : {result['classification']}")
-    print(f"Score          : {result['score']:.1f}/10")
-    print(f"Confidence     : {result['confidence']:.0f}%  (based on {result['signal_count']} signals agreeing)")
-    print(f"Market Structure : {result['structure']['structure']} ({result['structure']['detail']})")
-    print(f"Trend Stage    : {result['stage']}")
-    print(f"Latest Pattern : {result['patterns']['pattern']} (conf. {result['patterns']['confidence']}%)")
-    print(f"Support Zones  : {', '.join(f'{z:.2f}' for z in result['support_zones'][:3])}")
-    print(f"Resistance Zones: {', '.join(f'{z:.2f}' for z in result['resistance_zones'][:3])}")
-    print("\n--- Details ---")
-    for line in result['details']:
-        print(f"  {line}")
-    print("\n📝  Summary:")
-    print(f"  {result['summary']}")
-    print("=" * 60)
 
 def get_user_input():
     print("No command-line arguments provided. Enter details interactively.")
@@ -896,7 +797,7 @@ if __name__ == "__main__":
     save_to_json(ohlc, symbol, timeframe)
 
     result = compute_trend_score(ohlc)
-    result["num_candles"] = len(ohlc)
+    result["num_candles"] = len(ohlc)  # add for metadata
 
     ts = int(time.time())
     export_metadata_json(result, symbol, timeframe, ts)
@@ -906,5 +807,3 @@ if __name__ == "__main__":
     else:
         print("ℹ️  Install matplotlib to generate chart images and HTML reports.")
         print("   pip install matplotlib")
-
-    print_terminal_analysis(result, symbol, timeframe)
